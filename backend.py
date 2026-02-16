@@ -42,24 +42,52 @@ def compute_layer_vsi(layer):
 
 def compute_weighted_vs(site_data):
     """
-    Computes weighted harmonic average Vs.
+    Computes weighted harmonic average Vs
+    considering depth of influence truncation.
     """
 
+    depth = site_data["depth_of_influence"]
+    layers = site_data["layers"]
+
+    cumulative_depth = 0
     numerator = 0
     denominator = 0
+    layers_used = 0
 
-    for layer in site_data["layers"]:
+    for layer in layers:
 
         ti = layer["thickness"]
+
+        # If adding this layer exceeds depth → truncate
+        if cumulative_depth + ti > depth:
+            ti = depth - cumulative_depth
+
         vsi = compute_layer_vsi(layer)
+
+        if vsi <= 0:
+            raise ValueError("Vsi must be greater than zero.")
 
         numerator += ti
         denominator += ti / vsi
 
+        cumulative_depth += ti
+        layers_used += 1
+
+        if cumulative_depth >= depth:
+            break
+
+    if cumulative_depth < depth:
+        raise ValueError(
+            "Total thickness is less than depth of influence."
+        )
+
     if denominator == 0:
         raise ValueError("Invalid denominator in Vs calculation.")
 
-    return numerator / denominator
+    weighted_vs = numerator / denominator
+
+    return weighted_vs, layers_used
+
 
 
 def determine_site_class(weighted_vs):
@@ -80,14 +108,13 @@ def determine_site_class(weighted_vs):
 
 
 def calculate_site_class(site_data):
-    """
-    Main backend engine.
-    """
 
-    weighted_vs = compute_weighted_vs(site_data)
+    weighted_vs, layers_used = compute_weighted_vs(site_data)
     site_class = determine_site_class(weighted_vs)
 
     return {
         "weighted_vs": weighted_vs,
-        "site_class": site_class
+        "site_class": site_class,
+        "layers_used": layers_used
     }
+

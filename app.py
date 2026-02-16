@@ -141,7 +141,7 @@ for i in range(int(num_layers)):
         "vs_value": vs_value if activate_vs else 0.0
     }
 
-st.divider()
+# st.divider()
 
 # -------------------------
 # DEPTH VALIDATION
@@ -166,7 +166,7 @@ with btn2:
         disabled=not valid_depth
     )
 
-st.divider()
+# st.divider()
 
 
 
@@ -199,9 +199,28 @@ if calculate_clicked:
 
     # Optional: store it if needed
     st.session_state["site_input_data"] = site_data
-    render_site_class_table()
+    
 
     result = calculate_site_class(site_data)
-
     print(result)
+
+    # st.divider()
+
+# ---------------- OUTPUT SECTION ----------------
+
+    output_col1, output_col2 = st.columns(2)
+
+    with output_col1:
+        st.metric(
+            label="Weighted Average Shear Wave Velocity (Vs)",
+            value=round(result["weighted_vs"], 3)
+        )
+
+    with output_col2:
+        st.success(f"Site Class: {result['site_class']}")
+
+    st.divider()
+
+    # Show reference table below result
+    render_site_class_table()
 
