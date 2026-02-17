@@ -1,40 +1,29 @@
 def compute_layer_vsi(layer):
-    """
-    Computes Vsi for a single layer based on IS 1893:2025 rules.
-    """
 
     soil = layer["soil_type"]
     n1 = layer["n1"]
     fines = layer["fines_less_than_15"]
     user_vsi = layer["vsi"]
 
-    # Case 1: Others → always user input
+    # Always use user Vsi for Others
     if soil == "Others":
         return user_vsi
 
-    # Case 2: N1 < 10 → correlation not applicable
+    # Correlation not valid when N1 < 10
     if n1 < 10:
         return user_vsi
 
-    # Case 3: Correlation applies
-
+    # Determine exponent
     if soil == "Dry Sands":
-        if fines == "Yes":
-            exponent = 0.5
-        else:
-            exponent = 0.3
+        exponent = 0.5 if fines == "Yes" else 0.3
 
     elif soil == "Saturated Sands":
-        if fines == "Yes":
-            exponent = 0.4
-        else:
-            exponent = 0.3
+        exponent = 0.4 if fines == "Yes" else 0.3
 
     elif soil == "Clays":
         exponent = 0.3
 
     else:
-        # fallback safety
         return user_vsi
 
     return 80 * (n1 ** exponent)
@@ -44,6 +33,7 @@ def compute_weighted_vs(site_data):
     """
     Computes weighted harmonic average Vs
     considering depth of influence truncation.
+    Returns weighted_vs, layers_used, breakdown list.
     """
 
     depth = site_data["depth_of_influence"]
@@ -52,26 +42,38 @@ def compute_weighted_vs(site_data):
     cumulative_depth = 0
     numerator = 0
     denominator = 0
-    layers_used = 0
+    breakdown = []
 
     for layer in layers:
 
-        ti = layer["thickness"]
+        ti_original = layer["thickness"]
 
-        # If adding this layer exceeds depth → truncate
-        if cumulative_depth + ti > depth:
+        # Apply truncation if needed
+        if cumulative_depth + ti_original > depth:
             ti = depth - cumulative_depth
+        else:
+            ti = ti_original
 
         vsi = compute_layer_vsi(layer)
 
         if vsi <= 0:
             raise ValueError("Vsi must be greater than zero.")
 
-        numerator += ti
-        denominator += ti / vsi
+        ti_over_vsi = ti / vsi
 
+        numerator += ti
+        denominator += ti_over_vsi
         cumulative_depth += ti
-        layers_used += 1
+
+        breakdown.append({
+            "layer": layer["layer"],
+            "effective_thickness": ti,
+            "soil_type": layer["soil_type"],
+            "fines": layer["fines_less_than_15"],
+            "n1": layer["n1"],
+            "computed_vsi": vsi,
+            "ti_over_vsi": ti_over_vsi
+        })
 
         if cumulative_depth >= depth:
             break
@@ -86,7 +88,8 @@ def compute_weighted_vs(site_data):
 
     weighted_vs = numerator / denominator
 
-    return weighted_vs, layers_used
+    return weighted_vs, len(breakdown), breakdown
+ 
 
 
 
@@ -108,13 +111,19 @@ def determine_site_class(weighted_vs):
 
 
 def calculate_site_class(site_data):
+    """
+    Main backend engine.
+    """
 
-    weighted_vs, layers_used = compute_weighted_vs(site_data)
+    weighted_vs, layers_used, breakdown = compute_weighted_vs(site_data)
+
     site_class = determine_site_class(weighted_vs)
 
     return {
         "weighted_vs": weighted_vs,
         "site_class": site_class,
-        "layers_used": layers_used
+        "layers_used": layers_used,
+        "breakdown": breakdown
     }
+
 

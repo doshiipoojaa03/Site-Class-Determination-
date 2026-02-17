@@ -1,6 +1,7 @@
 import streamlit as st
 from site_class_reference import render_site_class_table
 from backend import calculate_site_class
+from report_generator import generate_site_class_report
 
 
 st.set_page_config(layout="wide")
@@ -153,74 +154,87 @@ valid_depth = total_thickness >= depth
 if not valid_depth:
     st.warning("Total thickness must be greater than or equal to Depth of Influence.")
 
-# -------------------------
-# BUTTONS (Centered)
-# -------------------------
-
-btn1, btn2, btn3 = st.columns([1,1,1])
-
-with btn2:
-    calculate_clicked = st.button(
-        "Calculate",
-        use_container_width=True,
-        disabled=not valid_depth
-    )
-
-# st.divider()
-
-
-
-# ---------------- CALCULATION ----------------
-
-if calculate_clicked:
-
-    # -------------------------
-    # BUILD BACKEND DICTIONARY
-    # -------------------------
-
-    site_data = {
+site_data = {
         "depth_of_influence": float(depth),
         "num_layers": int(num_layers),
         "layers": []
     }
 
-    for i, layer in enumerate(st.session_state.layers_input):
-
-        layer_dict = {
+for i, layer in enumerate(st.session_state.layers_input):
+        site_data["layers"].append({
             "layer": i + 1,
             "thickness": float(layer["thickness"]),
             "soil_type": layer["soil_type"],
             "fines_less_than_15": layer["fines"],
             "n1": int(layer["n_value"]),
             "vsi": float(layer["vs_value"])
-        }
+        })
+# -------------------------
+# BUTTONS (Centered)
+# -------------------------
 
-        site_data["layers"].append(layer_dict)
+btn1, btn2, btn3 = st.columns([1,2,1])
 
-    # Optional: store it if needed
-    st.session_state["site_input_data"] = site_data
-    
+with btn2:
+    colA, colB = st.columns(2)
 
-    result = calculate_site_class(site_data)
-    print(result)
-
-    # st.divider()
-
-# ---------------- OUTPUT SECTION ----------------
-
-    output_col1, output_col2 = st.columns(2)
-
-    with output_col1:
-        st.metric(
-            label="Weighted Average Shear Wave Velocity (Vs)",
-            value=round(result["weighted_vs"], 3)
+    # -------- Calculate Button --------
+    with colA:
+        calculate_clicked = st.button(
+            "Calculate",
+            use_container_width=True,
+            disabled=not valid_depth
         )
 
-    with output_col2:
-        st.success(f"Site Class: {result['site_class']}")
+        if calculate_clicked:
+
+            result = calculate_site_class(site_data)
+
+            st.session_state["site_input_data"] = site_data
+            st.session_state["calculation_result"] = result
+
+            # Generate report file once
+            file_path = generate_site_class_report(site_data, result)
+            st.session_state["report_file"] = file_path
+    
+        # -------- Write Report Button --------
+    with colB:
+
+        if "report_file" in st.session_state:
+            with open(st.session_state["report_file"], "rb") as f:
+                st.download_button(
+                    "Write Report",
+                    data=f,
+                    file_name="Site_Class_Report.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
+                )
+        else:
+            st.button(
+                "Write Report",
+                use_container_width=True,
+                disabled=True
+            )
+# ---------------- OUTPUT SECTION ----------------
+if "calculation_result" in st.session_state:
+
+    result = st.session_state["calculation_result"]
 
     st.divider()
 
-    # Show reference table below result
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.metric(
+            "Weighted Average Shear Wave Velocity (Vs)",
+            round(result["weighted_vs"], 3)
+        )
+
+    with col2:
+        st.success(f"Site Class: {result['site_class']}")
+
+    st.divider()
     render_site_class_table()
+
+
 
